@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TheFly · Gain control in the fly visual connectome</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>TheFly</h1>
+    <p class="sub">Searching the <em>Drosophila</em> optic-lobe connectome for the circuits behind contrast gain control,
+      and asking what they do to the contrast response function (CRF).</p>
+    <nav id="tabs">
+      <button data-tab="overview" class="on">Overview</button>
+      <button data-tab="pools">Normalization pools</button>
+      <button data-tab="orient">Orientation</button>
+      <button data-tab="dm3">Dm3 circuit model</button>
+      <button data-tab="crf">In-silico CRFs</button>
+      <button data-tab="lesion">Lesions</button>
+      <button data-tab="methods">Methods &amp; caveats</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section id="overview" class="tab on">
+  <div class="cards" id="findings"></div>
+  <h2>How the pieces fit</h2>
+  <div class="pipeline">
+    <div><b>1 · Wiring</b><span>FlyWire right optic lobe, 1.5M connections, columnar cells mapped to 796 columns</span></div>
+    <div><b>2 · Candidate pools</b><span>Inhibitory types that pool many columns and feed the motion-detector inputs</span></div>
+    <div><b>3 · Orientation</b><span>Elongated input pools that share an axis across a cell type</span></div>
+    <div><b>4 · Simulation</b><span>flyvis connectome-constrained ensemble: CRFs, surrounds, lesions</span></div>
+    <div><b>5 · Subcircuit model</b><span>Dm3 → TmY built neuron-by-neuron from FlyWire, run live in your browser</span></div>
+  </div>
+  <p class="note">Everything here is computed from published data: no new experiments. The physiology to compare against is
+    Drews et al. 2020 (surround contrast normalization in the medulla) and the Silies lab's luminance gain control work.</p>
+</section>
+
+<section id="pools" class="tab">
+  <div class="row">
+    <div class="col">
+      <h2>Which cell types could be the denominator?</h2>
+      <p class="hint">Each dot is a FlyWire optic-lobe cell type. A normalization pool should be inhibitory (GABA or glutamate),
+        collect input from many columns, and send its output to the cells that feed T4/T5 or to lamina monopolar cells.
+        Click a dot.</p>
+      <div class="ctrl">
+        <label>y-axis <select id="poolY">
+          <option value="out_both">output to motion-detector inputs + LMCs</option>
+          <option value="frac_to_motion_inputs">output to motion-detector inputs</option>
+          <option value="frac_to_LMC">output to lamina monopolar cells</option>
+          <option value="frac_to_T4T5">output to T4/T5 directly</option></select></label>
+        <label><input type="checkbox" id="poolInhOnly" checked> inhibitory only</label>
+      </div>
+      <div id="poolScatter" class="plot"></div>
+    </div>
+    <div class="col">
+      <div id="poolDetail" class="detail"><p class="hint">Select a cell type to see where its inputs come from.</p></div>
+    </div>
+  </div>
+  <h3>Ranked candidates</h3>
+  <div id="poolTable" class="table"></div>
+</section>
+
+<section id="orient" class="tab">
+  <div class="row">
+    <div class="col">
+      <h2>Wiring consistent with orientation tuning</h2>
+      <p class="hint">x: how elongated a neuron's columnar input pool is, beyond a round disk of the same size on the real lattice.
+        y: how consistently the neurons of a type share that axis (resultant length of doubled angles; 0 random, 1 identical).
+        Types up and to the right have a type-wide orientation. Click a dot.</p>
+      <div class="ctrl">
+        <label>input <select id="orSrc"><option value="all">all columnar input</option><option value="exc">excitatory (ACh)</option><option value="inh">inhibitory (GABA/Glu)</option></select></label>
+        <label>min cells <input type="number" id="orMin" value="10" min="3" max="200" style="width:4em"></label>
+        <label>highlight <select id="orHi"><option value="lamina">medulla → lamina feedback</option><option value="dm3">Dm3 triad</option><option value="none">none</option></select></label>
+      </div>
+      <div id="orScatter" class="plot"></div>
+    </div>
+    <div class="col">
+      <div id="orDetail" class="detail"><p class="hint">Select a cell type.</p></div>
+    </div>
+  </div>
+  <div class="callout" id="laminaCallout"></div>
+</section>
+
+<section id="dm3" class="tab">
+  <h2>The Dm3 orientation subconnectome, simulated</h2>
+  <p class="hint">Every Dm3p/q/v and TmY9q/TmY9q⊥/TmY4 neuron of the right optic lobe, wired with its real FlyWire synapse counts.
+    Columnar inputs carry rectified ON (Mi1, Tm3, Mi4, C3) or OFF (Tm1, Tm2, Tm4, Tm9, L2, L3) contrast; signs follow
+    transmitter (ACh +, GABA/Glu −). Stimuli are static gratings on the eye's column lattice; responses are the peak over
+    grating phase. The model runs in your browser.</p>
+  <div class="row">
+    <div class="col narrow">
+      <div class="panel">
+        <label>target cell <select id="mTarget"><option>TmY9q</option><option value="TmY9q__perp">TmY9q⊥</option><option>TmY4</option></select></label>
+        <label>Dm3 inhibition <select id="mMode"><option value="div">divisive (shunting)</option><option value="sub">subtractive</option></select></label>
+        <label>Dm3 gain <input type="range" id="mGain" min="0" max="10" step="0.5" value="1"><span id="mGainV">1</span></label>
+        <label>mask contrast <input type="range" id="mMaskC" min="0" max="0.5" step="0.05" value="0.25"><span id="mMaskCV">0.25</span></label>
+        <label>wavelength (columns) <input type="range" id="mWL" min="3" max="8" step="0.5" value="4"><span id="mWLV">4</span></label>
+        <button id="mRun">Run</button>
+        <p class="hint" id="mStatus"></p>
+      </div>
+      <div id="dm3Diagram"></div>
+    </div>
+    <div class="col">
+      <div class="grid2">
+        <div id="mTuning" class="plot sm"></div>
+        <div id="mCRF" class="plot sm"></div>
+        <div id="mMask" class="plot sm"></div>
+        <div id="mMap" class="plot sm"></div>
+      </div>
+    </div>
+  </div>
+  <div class="callout" id="dm3Callout"></div>
+</section>
+
+<section id="crf" class="tab">
+  <div class="row">
+    <div class="col">
+      <h2>Contrast response functions in the flyvis ensemble</h2>
+      <p class="hint">Drifting grating in a centre disk (radius 2 columns) with an annular surround (from 4 columns out) at
+        0–100% contrast, iso-oriented or orthogonal. F1 amplitude of the central cell, preferred direction, normalized to its
+        own full-contrast response. Mean ± SEM over the best models of the Lappalainen et al. ensemble.</p>
+      <div class="ctrl"><label>cell type <select id="crfType"></select></label></div>
+      <div id="crfPlot" class="plot"></div>
+      <div id="sizePlot" class="plot sm"></div>
+    </div>
+    <div class="col">
+      <h3>Contrast gain vs response gain, all cell types</h3>
+      <p class="hint">Naka–Rushton fits (exponent fixed by the no-surround fit). Rightward shift of c50 = contrast gain;
+        downward Rmax = response gain. Full-contrast iso surround.</p>
+      <div class="ctrl"><label>surround <select id="gainSur"><option value="iso100">iso, 100%</option><option value="iso50">iso, 50%</option><option value="orth100">orthogonal, 100%</option><option value="orth50">orthogonal, 50%</option></select></label></div>
+      <div id="gainMap" class="plot"></div>
+      <div id="ssiBars" class="plot sm"></div>
+    </div>
+  </div>
+</section>
+
+<section id="lesion" class="tab">
+  <h2>Cutting subconnectomes</h2>
+  <p class="hint">Edges removed from the trained networks before simulating (no retraining). "Lateral inhibition" cuts every
+    inhibitory connection between different columns (photoreceptor and lamina outputs spared); "lateral excitation" the excitatory equivalent.</p>
+  <div class="ctrl">
+    <label>lesion <select id="lesName"></select></label>
+    <label>cell type <select id="lesType"></select></label>
+    <label>show <select id="lesMetric"><option value="ssi_iso">change in iso surround suppression</option><option value="ssi_orth">change in orthogonal surround suppression</option><option value="gain">response at full contrast (× intact)</option></select></label>
+  </div>
+  <div class="row">
+    <div class="col"><div id="lesBars" class="plot"></div></div>
+    <div class="col"><div id="lesCRF" class="plot"></div></div>
+  </div>
+  <div id="lesHeat" class="plot tall"></div>
+</section>
+
+<section id="methods" class="tab">
+  <div id="methodsText" class="prose"></div>
+</section>
+
+</main>
+<footer class="wrap">Data: FlyWire v783 (Dorkenwald et al. 2024; Schlegel et al. 2024; Matsliah et al. 2024), flyvis
+  (Lappalainen et al. 2024). Analysis code in <code>analysis/</code>. Built with Claude.</footer>
+<script src="js/dm3.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
