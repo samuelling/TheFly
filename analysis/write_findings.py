@@ -9,9 +9,10 @@ pools = sorted([t for t in fw['types'] if t['pool_score'] is not None], key=lamb
 pool_txt = ', '.join(f"{t['type']} ({t['nt'][:4]}, ~{t['all_footprint']:.0f} columns)" for t in pools)
 maxrad = max(t['pool_radius'] for t in wir['types'])
 cells = S.get('cells', {})
-act = [t for t in cells if cells[t]['raw_amp'] > 1e-3]
+act = [t for t in cells if cells[t].get('active', cells[t]['raw_amp'] > 1e-3)]
 ssi = np.array([cells[t]['ssi']['iso100'] for t in act]) if act else np.array([0])
-n_supp = int((ssi > 0.1).sum()); med = float(np.median(ssi))
+n_supp = int((ssi > 0.1).sum()); n_fac = int((ssi < -0.1).sum()); med = float(np.median(ssi))
+fac = ', '.join(sorted([t for t in act if cells[t]['ssi']['iso100'] < -0.1], key=lambda t: cells[t]['ssi']['iso100'])[:4])
 d3 = {t: ds[t]['ff'] for t in ['Dm3p', 'Dm3q', 'Dm3v', 'TmY9q', 'TmY9q__perp', 'TmY4']}
 dang = lambda a, b: abs(((a - b) + 90) % 180 - 90)
 pairs = [('TmY9q', 'Dm3p'), ('TmY9q__perp', 'Dm3q'), ('TmY4', 'Dm3v')]
@@ -34,22 +35,30 @@ cards = [
       text=f"Ranking FlyWire optic-lobe types by inhibitory transmitter, input footprint and output onto the T4/T5 inputs or lamina monopolar cells gives: {pool_txt}. "
            f"Most are Dm/Pm amacrine-like cells driven by L2/L5/Tm1 and feeding back onto the same pathways: the wiring a divisive denominator needs."),
  dict(tag='Simulation', title='The flyvis model has almost no surround normalization',
-      text=f"In the connectome-constrained ensemble, a full-contrast surround (≥4 columns out) changes the centre response by a median of {med*100:.0f}% across {len(act)} active cell types; "
-           f"only {n_supp} types are suppressed by more than 10%. Its widest direct input pool spans ~{maxrad:.1f} column spacings, and the wide-field Dm/Pm types above are not in it. "
-           "So the model is missing the denominator that Drews et al. measured."),
+      text=f"In the connectome-constrained ensemble, a full-contrast iso surround (≥4 columns out) changes the centre response by a median of {abs(med)*100:.1f}% across {len(act)} responsive cell types. "
+           f"{n_supp} types are suppressed by more than 10%; {n_fac} are instead facilitated (e.g. {fac}): in this model an iso surround adds drive rather than dividing it. "
+           f"Its widest direct input pool spans ~{maxrad:.1f} column spacings, and the wide-field Dm/Pm types above are not in it. So the model lacks the surround normalization (the denominator) that Drews et al. measured."),
  dict(tag='Orientation', title='The Dm3 triad: three orientation channels in the wiring',
       text=f"Measuring input-pool shape cell by cell on the column lattice singles out Dm3p, Dm3q and Dm3v: elongated pools with axes "
            f"{T['Dm3p']['all_axis']:.0f}°, {T['Dm3q']['all_axis']:.0f}° and {T['Dm3v']['all_axis']:.0f}° (about 60° apart), each shared across hundreds of cells "
-           f"(consistency {T['Dm3p']['all_axis_R']:.2f}–{T['Dm3v']['all_axis_R']:.2f}). Each subtype sends most of its output to one TmY partner. This matches the hex-axis naming of Matsliah et al., recovered here from wiring alone."),
+           f"(axis consistency ≥ {min(T[x]['all_axis_R'] for x in ('Dm3p','Dm3q','Dm3v')):.2f}). Each subtype sends most of its output to one TmY partner. This matches the hex-axis naming of Matsliah et al., recovered here from wiring alone."),
  dict(tag='Gain control', title='Wired for cross-orientation inhibition, acts mostly untuned',
       text=f"Simulating the real Dm3 → TmY neurons, each TmY's preferred orientation sits close to orthogonal to the Dm3 subtype that inhibits it ({orth}). "
            f"Yet with divisive inhibition Dm3 adds more masking for a parallel mask ({iso_vs_orth[0]:+.2f} masking ratio) than an orthogonal one ({iso_vs_orth[1]:+.2f}), "
            "because individual Dm3 tuning is broad (OSI ≈ 0.16) and contrast energy dominates. Orientation-tuned gain control would need sharper Dm3 tuning or nonlinear dendrites."),
 ]
 if les:
-    cards.append(dict(tag='Lesions', title='What the model\'s own lateral wiring does',
-      text=f"Cutting all cross-column inhibitory edges changes iso surround suppression most in: {les_line('lateral_inhibition') or '–'}. "
-           f"Cutting cross-column excitation: {les_line('lateral_excitation') or '–'}. See the Lesions tab for single cell types (TmY15, CT1, Mi4/Mi9, C2/C3, Lawf, Am)."))
+    def stat(name, key='iso100'):
+        L = les[name]['cells']
+        d = {t: L[t]['ssi_lesioned'][key] - L[t]['ssi_intact'][key] for t in act if t in L and L[t]['ssi_lesioned'][key] is not None}
+        g = float(np.median([L[t]['gain_change'] for t in act if t in L]))
+        return d, g
+    li, gli = stat('lateral_inhibition'); le, gle = stat('lateral_excitation'); mm, gmm = stat('Mi4_Mi9')
+    top = lambda d: ', '.join(f'{t} {v:+.2f}' for t, v in sorted(d.items(), key=lambda kv: -abs(kv[1]))[:3])
+    cards.append(dict(tag='Lesions', title="The model's surround effects come from a few cross-column paths",
+      text=f"Cutting every inhibitory cross-column edge shifts iso surround suppression most in ({top(li)}) and lowers responses overall (median ×{gli:.2f}). "
+           f"Cutting cross-column excitation acts on a different set ({top(le)}). Removing Mi4 + Mi9 destabilizes the network (responses ×{gmm:.1f}), "
+           "so T4's flanking inhibition is also what holds the trained model's gain in check. Single-type lesions are in the Lesions tab."))
 lam = T.get('Lawf1'), T.get('Lawf2'), T.get('C2'), T.get('C3')
 lamina = ("The lamina is incomplete in the FAFB volume and R1–6 are not column-mapped, so retina → lamina convergence can't be measured here (neural superposition pools six photoreceptors that view one point, which is round by construction). "
           f"For medulla → lamina feedback, individual Lawf1 and Lawf2 cells do pool excitatory input over elongated patches (excess elongation {f(lam[0]['exc_elong'])} and {f(lam[1]['exc_elong'])}), "

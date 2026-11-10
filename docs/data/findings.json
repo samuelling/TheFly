@@ -8,17 +8,22 @@
   {
    "tag": "Simulation",
    "title": "The flyvis model has almost no surround normalization",
-   "text": "In the connectome-constrained ensemble, a full-contrast surround (\u22654 columns out) changes the centre response by a median of 0% across 65 active cell types; only 2 types are suppressed by more than 10%. Its widest direct input pool spans ~2.0 column spacings, and the wide-field Dm/Pm types above are not in it. So the model is missing the denominator that Drews et al. measured."
+   "text": "In the connectome-constrained ensemble, a full-contrast iso surround (\u22654 columns out) changes the centre response by a median of 0.6% across 63 responsive cell types. 0 types are suppressed by more than 10%; 8 are instead facilitated (e.g. T5d, TmY9, T5b, L3): in this model an iso surround adds drive rather than dividing it. Its widest direct input pool spans ~2.0 column spacings, and the wide-field Dm/Pm types above are not in it. So the model lacks the surround normalization (the denominator) that Drews et al. measured."
   },
   {
    "tag": "Orientation",
    "title": "The Dm3 triad: three orientation channels in the wiring",
-   "text": "Measuring input-pool shape cell by cell on the column lattice singles out Dm3p, Dm3q and Dm3v: elongated pools with axes 41\u00b0, 151\u00b0 and 97\u00b0 (about 60\u00b0 apart), each shared across hundreds of cells (consistency 0.91\u20130.90). Each subtype sends most of its output to one TmY partner. This matches the hex-axis naming of Matsliah et al., recovered here from wiring alone."
+   "text": "Measuring input-pool shape cell by cell on the column lattice singles out Dm3p, Dm3q and Dm3v: elongated pools with axes 41\u00b0, 151\u00b0 and 97\u00b0 (about 60\u00b0 apart), each shared across hundreds of cells (axis consistency \u2265 0.89). Each subtype sends most of its output to one TmY partner. This matches the hex-axis naming of Matsliah et al., recovered here from wiring alone."
   },
   {
    "tag": "Gain control",
    "title": "Wired for cross-orientation inhibition, acts mostly untuned",
    "text": "Simulating the real Dm3 \u2192 TmY neurons, each TmY's preferred orientation sits close to orthogonal to the Dm3 subtype that inhibits it (TmY9q\u2013Dm3p 78\u00b0, TmY9q\u22a5\u2013Dm3q 86\u00b0, TmY4\u2013Dm3v 87\u00b0). Yet with divisive inhibition Dm3 adds more masking for a parallel mask (-0.10 masking ratio) than an orthogonal one (-0.04), because individual Dm3 tuning is broad (OSI \u2248 0.16) and contrast energy dominates. Orientation-tuned gain control would need sharper Dm3 tuning or nonlinear dendrites."
+  },
+  {
+   "tag": "Lesions",
+   "title": "The model's surround effects come from a few cross-column paths",
+   "text": "Cutting every inhibitory cross-column edge shifts iso surround suppression most in (TmY9 +0.52, T5d -0.31, Mi3 -0.29) and lowers responses overall (median \u00d70.89). Cutting cross-column excitation acts on a different set (L3 +0.29, Mi12 +0.19, Tm4 +0.16). Removing Mi4 + Mi9 destabilizes the network (responses \u00d75.3), so T4's flanking inhibition is also what holds the trained model's gain in check. Single-type lesions are in the Lesions tab."
   }
  ],
  "lamina": "The lamina is incomplete in the FAFB volume and R1\u20136 are not column-mapped, so retina \u2192 lamina convergence can't be measured here (neural superposition pools six photoreceptors that view one point, which is round by construction). For medulla \u2192 lamina feedback, individual Lawf1 and Lawf2 cells do pool excitatory input over elongated patches (excess elongation 0.68 and 0.57), but their axes are not shared across the type (consistency 0.32, 0.04). C2 and C3 pool only ~5 and ~3 columns. So there is no type-wide orientation signal in the feedback to the lamina. The orientation structure appears one step later, in the medulla, in Dm3 and TmY9.",

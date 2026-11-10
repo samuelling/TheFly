@@ -141,14 +141,21 @@ for ln in lesion_names:
         X = {k: np.stack([les[m][k][:, ti] for m in ms]) for k, _, _ in LSUR}
         sc_ = I['s0'][:, -1:].copy(); sc_[sc_ <= 1e-9] = 1
         ssi_i = {k: float(np.mean(1 - I[k][:, -1] / sc_[:, 0])) for k in ('iso100', 'orth100')}
-        xs = X['s0'][:, -1:].copy(); xs[xs <= 1e-9] = 1
-        ssi_x = {k: float(np.mean(1 - X[k][:, -1] / xs[:, 0])) for k in ('iso100', 'orth100')}
+        xs = X['s0'][:, -1:].copy()
+        ok = bool(np.all(xs[:, 0] > 0.1 * sc_[:, 0]))  # lesioned cell still responds (>10% of intact)
+        xs[xs <= 1e-9] = 1
+        ssi_x = {k: (float(np.mean(1 - X[k][:, -1] / xs[:, 0])) if ok else None) for k in ('iso100', 'orth100')}
         L['cells'][t] = dict(intact={k: (v / sc_).mean(0).round(4).tolist() for k, v in I.items()},
                              lesioned={k: (v / sc_).mean(0).round(4).tolist() for k, v in X.items()},
-                             gain_change=round(float(np.mean(X['s0'][:, -1] / sc_[:, 0])), 4),
+                             gain_change=round(float(np.exp(np.mean(np.log(np.maximum(X['s0'][:, -1], 1e-6) / sc_[:, 0])))), 4),
                              ssi_intact={k: round(v, 4) for k, v in ssi_i.items()},
-                             ssi_lesioned={k: round(v, 4) for k, v in ssi_x.items()})
+                             ssi_lesioned={k: (None if v is None else round(v, 4)) for k, v in ssi_x.items()})
     S['lesions'][ln] = L
 S['lesion_contrasts'] = LCS
+amps = np.array([c['raw_amp'] for c in S['cells'].values()])
+thr = 0.05 * float(np.median(amps))
+for t, c in S['cells'].items():
+    c['active'] = bool(c['raw_amp'] > thr)
+S['activity_threshold'] = thr
 json.dump(S, open('docs/data/sims.json', 'w'), separators=(',', ':'), allow_nan=False, default=lambda o: None)
 print('cells', len(S['cells']), 'lesions', list(S['lesions']), 'models', S['models'])

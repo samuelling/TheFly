@@ -262,7 +262,7 @@ const SUR_STYLE = {s0: ['no surround', '#1d1d1b', 'solid'], iso25: ['iso 25%', '
   orth50: ['orth 50%', '#fdae6b', 'dash'], orth100: ['orth 100%', '#d94801', 'dash']};
 function initCRF() {
   const S = D.sims; if (!S || !S.cells || !Object.keys(S.cells).length) { $('crfPlot').innerHTML = '<p class="hint">Simulation results not available yet.</p>'; return; }
-  const types = S.types.filter(t => S.cells[t] && S.cells[t].raw_amp > 1e-3);
+  const types = S.types.filter(t => S.cells[t] && S.cells[t].active);
   $('crfType').innerHTML = types.map(t => `<option ${t === 'T4a' ? 'selected' : ''}>${t}</option>`).join('');
   $('crfType').onchange = () => drawCRF($('crfType').value);
   $('gainSur').onchange = drawGainMap;
@@ -284,7 +284,7 @@ function drawCRF(t) {
 }
 function drawGainMap() {
   const S = D.sims, k = $('gainSur').value;
-  const rows = S.types.filter(t => S.cells[t] && S.cells[t].raw_amp > 1e-3 && S.cells[t].fits && S.cells[t].fits[k] && S.cells[t].fits.s0).map(t => {
+  const rows = S.types.filter(t => S.cells[t] && S.cells[t].active && S.cells[t].fits && S.cells[t].fits[k] && S.cells[t].fits.s0).map(t => {
     const f = S.cells[t].fits; return {t, x: Math.log2(Math.min(f[k].c50, 5) / Math.min(f.s0.c50, 5)), y: f[k].rmax / f.s0.rmax, lin: f.s0.c50 > 2};
   });
   Plotly.react('gainMap', [{x: rows.map(r => r.x), y: rows.map(r => r.y), text: rows.map(r => r.t), mode: 'markers+text', textposition: 'top center', textfont: {size: 9, color: '#777'},
@@ -293,7 +293,7 @@ function drawGainMap() {
       shapes: [{type: 'line', x0: 0, x1: 0, yref: 'paper', y0: 0, y1: 1, line: {color: '#ccc', dash: 'dot'}}, {type: 'line', y0: 1, y1: 1, xref: 'paper', x0: 0, x1: 1, line: {color: '#ccc', dash: 'dot'}}],
       annotations: [{xref: 'paper', yref: 'paper', x: 1, y: 1.06, showarrow: false, text: 'grey = CRF nearly linear (c50 > 2), shifts unreliable', font: {size: 10, color: '#888'}}]}), CFG);
   $('gainMap').on('plotly_click', e => { const t = e.points[0].text; $('crfType').value = t; drawCRF(t); });
-  const ss = S.types.filter(t => S.cells[t] && S.cells[t].raw_amp > 1e-3).map(t => ({t, iso: S.cells[t].ssi.iso100, orth: S.cells[t].ssi.orth100})).sort((a, b) => b.iso - a.iso);
+  const ss = S.types.filter(t => S.cells[t] && S.cells[t].active).map(t => ({t, iso: S.cells[t].ssi.iso100, orth: S.cells[t].ssi.orth100})).sort((a, b) => b.iso - a.iso);
   Plotly.react('ssiBars', [{x: ss.map(r => r.t), y: ss.map(r => r.iso), type: 'bar', name: 'iso 100%', marker: {color: '#08519c'}}, {x: ss.map(r => r.t), y: ss.map(r => r.orth), type: 'bar', name: 'orth 100%', marker: {color: '#d94801'}}],
     L({title: {text: 'surround suppression index at full contrast (negative = facilitation)', font: {size: 12}}, barmode: 'group', xaxis: {tickangle: -60, tickfont: {size: 9}}, yaxis: {title: 'SSI'}, legend: {orientation: 'h', y: 1.15}, margin: {l: 55, r: 10, t: 40, b: 80}}), CFG);
 }
@@ -305,22 +305,23 @@ function initLesion() {
   const S = D.sims; if (!S || !S.lesions || !Object.keys(S.lesions).length) { $('lesBars').innerHTML = '<p class="hint">Lesion runs not available yet.</p>'; return; }
   const names = Object.keys(S.lesions);
   $('lesName').innerHTML = names.map(n => `<option value="${n}">${LES_LABEL[n] || n}</option>`).join('');
-  const types = S.types.filter(t => S.cells[t] && S.cells[t].raw_amp > 1e-3);
+  const types = S.types.filter(t => S.cells[t] && S.cells[t].active);
   $('lesType').innerHTML = types.map(t => `<option ${t === 'T4a' ? 'selected' : ''}>${t}</option>`).join('');
   ['lesName', 'lesType', 'lesMetric'].forEach(k => $(k).onchange = drawLesion);
   drawLesion();
   // heatmap
-  const z = names.map(n => types.map(t => { const c = S.lesions[n].cells[t]; return c ? c.ssi_lesioned.iso100 - c.ssi_intact.iso100 : null; }));
-  Plotly.react('lesHeat', [{type: 'heatmap', z, x: types, y: names.map(n => LES_LABEL[n] || n), colorscale: 'RdBu', zmid: 0, reversescale: true, colorbar: {title: 'ΔSSI'}}],
-    L({title: {text: 'change in iso surround suppression after each lesion (red = more suppression)', font: {size: 12}}, xaxis: {tickangle: -60, tickfont: {size: 9}}, yaxis: {automargin: true}, margin: {l: 280, r: 10, t: 40, b: 90}}), CFG);
+  const z = names.map(n => types.map(t => { const c = S.lesions[n].cells[t]; return (c && c.ssi_lesioned.iso100 !== null) ? c.ssi_lesioned.iso100 - c.ssi_intact.iso100 : null; }));
+  Plotly.react('lesHeat', [{type: 'heatmap', z, x: types, y: names.map(n => LES_LABEL[n] || n), colorscale: 'RdBu', zmid: 0, zmin: -0.5, zmax: 0.5, reversescale: true, colorbar: {title: 'ΔSSI'}, hoverongaps: false}],
+    L({title: {text: 'change in iso surround suppression after each lesion (red = more suppression; blank = cell silenced by the lesion)', font: {size: 12}}, xaxis: {tickangle: -60, tickfont: {size: 9}}, yaxis: {automargin: true}, margin: {l: 280, r: 10, t: 40, b: 90}}), CFG);
 }
 function drawLesion() {
   const S = D.sims, n = $('lesName').value, t = $('lesType').value, m = $('lesMetric').value, Ls = S.lesions[n];
-  const types = S.types.filter(x => S.cells[x] && S.cells[x].raw_amp > 1e-3 && Ls.cells[x]);
-  const val = x => { const c = Ls.cells[x]; return m === 'gain' ? c.gain_change : m === 'ssi_iso' ? c.ssi_lesioned.iso100 - c.ssi_intact.iso100 : c.ssi_lesioned.orth100 - c.ssi_intact.orth100; };
-  const rows = types.map(x => ({x, v: val(x)})).sort((a, b) => b.v - a.v);
+  const types = S.types.filter(x => S.cells[x] && S.cells[x].active && Ls.cells[x]);
+  const dd = (a, b) => (a === null || b === null) ? null : a - b;
+  const val = x => { const c = Ls.cells[x]; return m === 'gain' ? c.gain_change : m === 'ssi_iso' ? dd(c.ssi_lesioned.iso100, c.ssi_intact.iso100) : dd(c.ssi_lesioned.orth100, c.ssi_intact.orth100); };
+  const rows = types.map(x => ({x, v: val(x)})).filter(r => r.v !== null).sort((a, b) => b.v - a.v);
   Plotly.react('lesBars', [{x: rows.map(r => r.x), y: rows.map(r => r.v), type: 'bar', marker: {color: rows.map(r => r.x === t ? '#7a4fb5' : '#2f5d8a')}}],
-    L({title: {text: `${LES_LABEL[n] || n} · ${$('lesMetric').selectedOptions[0].text} (n=${Ls.models.length} models)`, font: {size: 12}}, xaxis: {tickangle: -60, tickfont: {size: 9}}, margin: {l: 55, r: 10, t: 40, b: 80}}), CFG);
+    L({title: {text: `${LES_LABEL[n] || n} · ${$('lesMetric').selectedOptions[0].text} (n=${Ls.models.length} models; silenced cells omitted)`, font: {size: 12}}, xaxis: {tickangle: -60, tickfont: {size: 9}}, yaxis: m === 'gain' ? {type: 'log', title: '× intact'} : {title: 'ΔSSI'}, margin: {l: 55, r: 10, t: 40, b: 80}}), CFG);
   $('lesBars').on('plotly_click', e => { $('lesType').value = e.points[0].x; drawLesion(); });
   const c = Ls.cells[t], cs = S.lesion_contrasts, tr = [];
   for (const k of ['s0', 'iso100', 'orth100']) {
