@@ -23,10 +23,10 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
 });
 
 (async () => {
-  [D.fw, D.sims, D.circ, D.dsum, D.find, D.wiring] = await Promise.all(['data/flywire.json', 'data/sims.json', 'data/dm3_circuit.json',
-    'data/dm3_summary.json', 'data/findings.json', 'data/flyvis_wiring.json'].map(getJSON));
+  [D.fw, D.sims, D.circ, D.dsum, D.find, D.wiring, D.graft] = await Promise.all(['data/flywire.json', 'data/sims.json', 'data/dm3_circuit.json',
+    'data/dm3_summary.json', 'data/findings.json', 'data/flyvis_wiring.json', 'data/graft.json'].map(getJSON));
   D.byType = Object.fromEntries((D.fw?.types || []).map(t => [t.type, t]));
-  renderFindings(); initPools(); initOrient(); initDm3(); initCRF(); initLesion(); renderMethods();
+  renderFindings(); initPools(); initOrient(); initDm3(); initCRF(); initLesion(); initGraft(); renderMethods();
 })();
 
 // ---------------------------------------------------------------- overview
@@ -330,6 +330,73 @@ function drawLesion() {
     tr.push({x: cs, y: c.lesioned[k], name: name + ' · lesioned', mode: 'lines+markers', line: {color: col, dash: 'dot'}, marker: {symbol: 'circle-open'}});
   }
   Plotly.react('lesCRF', tr, L({title: {text: `${t}: intact vs lesioned`, font: {size: 12}}, xaxis: Object.assign({type: 'log', title: 'centre contrast'}, CTICKS), yaxis: {title: 'F1 / intact F1(c=1)'}}), CFG);
+}
+
+// ---------------------------------------------------------------- grafted pools
+const CFG_LABEL = c => {
+  if (c === 'intact') return 'intact model';
+  const m = c.match(/^(div|sub)_(all|Dm17|Dm1|Dm15)_g([\d.]+)$/);
+  if (m) return `${m[1] === 'div' ? 'divisive' : 'subtractive'} · ${m[2] === 'all' ? 'Dm17 + Dm1 + Dm15' : m[2] + ' only'} · g = ${m[3]}`;
+  if (c === 'ft_div_learned') return 'fine-tuned on optic flow · divisive pools on (learned gains)';
+  if (c === 'ft_nopool') return 'fine-tuned on optic flow · pools switched off';
+  return c;
+};
+function grCells(c) { return c === 'intact' ? D.graft.intact : D.graft.configs[c].cells; }
+function initGraft() {
+  const G = D.graft; if (!G || !G.configs || !Object.keys(G.configs).length) { $('grCRF').innerHTML = '<p class="hint">Graft results not available yet.</p>'; return; }
+  const types = Object.keys(G.intact);
+  $('grType').innerHTML = types.map(t => `<option ${t === 'Tm2' ? 'selected' : ''}>${t}</option>`).join('');
+  const cfgs = Object.keys(G.configs).sort((a, b) => (a.startsWith('ft') ? -1 : 0) - (b.startsWith('ft') ? -1 : 0));
+  $('grCfg').innerHTML = cfgs.map(c => `<option value="${c}" ${c === 'div_Dm17_g2' ? 'selected' : ''}>${CFG_LABEL(c)}</option>`).join('');
+  ['grType', 'grCfg'].forEach(k => $(k).onchange = drawGraft);
+  drawGraft(); drawGraftTask();
+  $('grCallout').innerHTML = D.find?.graft || '';
+}
+function drawGraft() {
+  const G = D.graft, t = $('grType').value, c = $('grCfg').value, cs = G.contrasts;
+  const I = G.intact[t], X = grCells(c)[t];
+  const tr = [];
+  for (const k of ['s0', 'iso100', 'orth100']) {
+    const [name, col] = SUR_STYLE[k];
+    tr.push({x: cs, y: I.mean[k], name: name + ' · intact', mode: 'lines+markers', line: {color: col, width: 1.5}, opacity: 0.55});
+    if (X) tr.push({x: cs, y: X.mean[k], name: name + ' · grafted', mode: 'lines+markers', line: {color: col, width: 3}, marker: {symbol: 'diamond', size: 8}});
+  }
+  Plotly.react('grCRF', tr, L({title: {text: `${t}: intact vs ${CFG_LABEL(c)}`, font: {size: 12}}, xaxis: Object.assign({type: 'log', title: 'centre contrast'}, CTICKS), yaxis: {title: 'F1 / intact F1(c=1, no surround)'}}), CFG);
+  // gain sweep: SSI vs g for divisive vs subtractive (all pools)
+  const sweep = mode => Object.keys(G.configs).filter(k => k.startsWith(mode + '_all_')).map(k => ({g: +k.split('_g')[1], k})).sort((a, b) => a.g - b.g);
+  const tr2 = [];
+  for (const [mode, col] of [['div', '#7a4fb5'], ['sub', '#b9770e']]) {
+    const sw = [{g: 0, k: 'intact'}].concat(sweep(mode));
+    tr2.push({x: sw.map(r => r.g), y: sw.map(r => grCells(r.k)[t]?.ssi.iso100), name: `${mode === 'div' ? 'divisive' : 'subtractive'} · iso surround`, mode: 'lines+markers', line: {color: col}});
+    tr2.push({x: sw.map(r => r.g), y: sw.map(r => grCells(r.k)[t]?.ssi.orth100), name: `${mode === 'div' ? 'divisive' : 'subtractive'} · orth surround`, mode: 'lines+markers', line: {color: col, dash: 'dot'}});
+  }
+  Plotly.react('grSweep', tr2, L({title: {text: `${t}: surround suppression vs pool gain (full contrast)`, font: {size: 12}}, xaxis: {title: 'pool gain g', type: 'log', tickvals: [0.5, 2, 8]}, yaxis: {title: 'SSI (positive = suppression)'},
+    shapes: [{type: 'line', y0: 0, y1: 0, xref: 'paper', x0: 0, x1: 1, line: {color: '#ccc', dash: 'dot'}}]}), CFG);
+  // across types: how the pools change each cell's own CRF (centre alone) vs intact
+  const C = grCells(c), rows = Object.keys(C).filter(k => C[k].fits && C[k].fits.s0 && G.intact[k].fits && G.intact[k].fits.s0).map(k => {
+    const a = G.intact[k].fits.s0, b = C[k].fits.s0; return {t: k, x: Math.log2(Math.min(b.c50, 5) / Math.min(a.c50, 5)), y: C[k].amp, ssi: C[k].ssi.iso100 - G.intact[k].ssi.iso100};
+  });
+  Plotly.react('grMap', [{x: rows.map(r => r.x), y: rows.map(r => r.y), text: rows.map(r => r.t), mode: 'markers+text', textposition: 'top center', textfont: {size: 9, color: '#777'},
+    marker: {size: 9, color: rows.map(r => r.ssi), colorscale: 'RdBu', reversescale: true, cmid: 0, cmin: -0.4, cmax: 0.4, colorbar: {title: 'ΔSSI', thickness: 10}},
+    hovertemplate: '<b>%{text}</b><br>log2 c50 shift %{x:.2f}<br>response at c=1: ×%{y:.2f}<extra></extra>'}],
+    L({title: {text: 'centre-only CRF change vs intact (colour: change in iso surround suppression)', font: {size: 12}}, xaxis: {title: 'contrast gain: log2(c50 grafted / intact)'}, yaxis: {title: 'response at full contrast (× intact)', type: 'log'},
+      shapes: [{type: 'line', x0: 0, x1: 0, yref: 'paper', y0: 0, y1: 1, line: {color: '#ccc', dash: 'dot'}}, {type: 'line', y0: 1, y1: 1, xref: 'paper', x0: 0, x1: 1, line: {color: '#ccc', dash: 'dot'}}]}), CFG);
+  $('grMap').on('plotly_click', e => { $('grType').value = e.points[0].text; drawGraft(); });
+}
+function drawGraftTask() {
+  const F = D.graft.finetune || {}, ms = Object.keys(F);
+  if (!ms.length) { $('grTask').innerHTML = '<p class="hint">Fine-tuning results not available.</p>'; return; }
+  const f = F[ms[0]], g = f.graft, c = f.control;
+  const sm = (a, w = 10) => a.map((_, i) => a.slice(Math.max(0, i - w + 1), i + 1).reduce((x, y) => x + y, 0) / Math.min(i + 1, w));
+  const tr = [];
+  if (g) tr.push({x: g.train_loss.map((_, i) => i + 1), y: sm(g.train_loss), name: 'training · grafted', mode: 'lines', line: {color: '#c9b3e6'}});
+  if (c) tr.push({x: c.train_loss.map((_, i) => i + 1), y: sm(c.train_loss), name: 'training · no pools (control)', mode: 'lines', line: {color: '#cfcdc5'}});
+  const bars = [['original model', g ? g.val_intact : c.val_intact, '#1d1d1b'], ...(g ? [['+ pools, before fine-tuning', g.val_grafted, '#d94801'], ['+ pools, fine-tuned', g.val_finetuned, '#7a4fb5']] : []),
+    ...(c ? [['no pools, same fine-tuning', c.val_finetuned, '#9a988f']] : [])];
+  Plotly.react('grTask', [{type: 'bar', x: bars.map(b => b[0]), y: bars.map(b => b[1]), marker: {color: bars.map(b => b[2])}, text: bars.map(b => b[1].toFixed(1)), textposition: 'outside'}],
+    L({title: {text: `optic-flow validation error (held-out fold), model ${ms[0]}`, font: {size: 12}}, yaxis: {title: 'L2 flow error', range: [Math.min(...bars.map(b => b[1])) * 0.95, Math.max(...bars.map(b => b[1])) * 1.03]}, showlegend: false, margin: {l: 55, r: 10, t: 40, b: 70}}), CFG);
+  if (g) $('grTaskNote').innerHTML = `Fine-tuning: ${g.train_loss.length} iterations on CPU (the published models had 250,000). Pool gains start at ${fmt(g.g_init, 1)} and are learned: ` +
+    Object.entries(g.gains_final).map(([k, v]) => `${k} → ${fmt(v)}`).join(', ') + `. Validation fold: ${g.n_val} sequences.`;
 }
 
 // ---------------------------------------------------------------- methods

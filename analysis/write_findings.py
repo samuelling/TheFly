@@ -59,6 +59,31 @@ if les:
       text=f"Cutting every inhibitory cross-column edge shifts iso surround suppression most in ({top(li)}) and lowers responses overall (median ×{gli:.2f}). "
            f"Cutting cross-column excitation acts on a different set ({top(le)}). Removing Mi4 + Mi9 destabilizes the network (responses ×{gmm:.1f}), "
            "so T4's flanking inhibition is also what holds the trained model's gain in check. Single-type lesions are in the Lesions tab."))
+import os
+if os.path.exists('docs/data/graft.json'):
+    G = json.load(open('docs/data/graft.json')); GI = G['intact']
+    def dssi(cfg, t, k='iso100'):
+        return G['configs'][cfg]['cells'][t]['ssi'][k] - GI[t]['ssi'][k]
+    c17 = 'div_Dm17_g2'
+    top17 = sorted(G['configs'][c17]['cells'], key=lambda t: -dssi(c17, t))[:4]
+    ft = G['finetune'].get('000', {})
+    gft, cft = ft.get('graft'), ft.get('control')
+    tm1 = G['configs']['div_Dm15_g2']['cells']['Tm1']['mean']['s0']; tm1i = GI['Tm1']['mean']['s0']
+    t45 = [t for t in GI if GI[t]['dsi'] is not None]
+    dsi_i = np.mean([GI[t]['dsi'] for t in t45]); dsi_f = np.mean([G['configs']['ft_div_learned']['cells'][t]['dsi'] for t in t45]) if 'ft_div_learned' in G['configs'] else None
+    t45d = np.median([dssi(c17, t) for t in t45])
+    graft_txt = (f"Grafting Dm17 alone (wide pool, σ ≈ {POOLS17:.1f} columns) produces surround suppression where Drews et al. found it: in the T4/T5 inputs. " if False else '')
+    cards.append(dict(tag='Graft', title='Adding Dm17 gives surround normalization, but only upstream',
+      text=f"Grafted as a divisive pool with FlyWire wiring, Dm17 makes its targets surround-suppressed ({', '.join(f'{t} {dssi(c17, t):+.2f}' for t in top17)} in iso SSI) and leaves their centre responses nearly intact. "
+           f"The local pools act on the centre instead: Dm15 compresses Tm1's CRF (100% contrast gives {tm1[-1]/tm1i[-1]:.2f}× the intact response, 50% gives {tm1[-2]/tm1i[-2]:.2f}×). "
+           f"T4/T5 do not inherit the surround effect (median ΔSSI {t45d:+.2f}), and the subtractive version is less specific and can amplify (Mi1 ×{G['configs']['sub_all_g2']['cells']['Mi1']['amp']:.1f})."
+           + (f" After {len(gft['train_loss'])} iterations of fine-tuning on optic flow, the grafted network's task error is {gft['val_finetuned']:.1f} versus {cft['val_finetuned']:.1f} for the same fine-tuning without pools (original {gft['val_intact']:.1f}). "
+              f"The learned gains stay well above zero ({', '.join(f'{k} {v:.2f}' for k, v in gft['gains_final'].items())}) and T4/T5 direction selectivity is kept (DSI {dsi_i:.2f} → {dsi_f:.2f})." if gft and cft else '')))
+    graft_callout = ("<b>Reading this tab.</b> Dividing and subtracting were matched to first order, so differences between them come from the form of the interaction alone. "
+        "Dm17 pools over a wide area and so is driven by the surround. Dm1 and Dm15 pool over only 1–2.5 columns, so they are driven by the centre stimulus itself. They therefore act more like self-normalization (CRF compression) than surround suppression. "
+        "The fine-tuning is short (one model, one seed, CPU), so the task comparison is suggestive, not conclusive: a proper test retrains the ensemble with the pools from the start.")
+else:
+    graft_callout = ''
 lam = T.get('Lawf1'), T.get('Lawf2'), T.get('C2'), T.get('C3')
 lamina = ("The lamina is incomplete in the FAFB volume and R1–6 are not column-mapped, so retina → lamina convergence can't be measured here (neural superposition pools six photoreceptors that view one point, which is round by construction). "
           f"For medulla → lamina feedback, individual Lawf1 and Lawf2 cells do pool excitatory input over elongated patches (excess elongation {f(lam[0]['exc_elong'])} and {f(lam[1]['exc_elong'])}), "
@@ -79,6 +104,7 @@ methods = """
 <li>Drifting sinusoidal gratings (λ = 8 columns, 2 Hz) in a centre disk (r = 2) with an annulus from r = 4 to the edge, iso or orthogonal, at dt = 20 ms (the training step). Response = F1 of the central cell over the last second, at each type's preferred of 4 directions. Best 5 models by validation loss for CRFs and size tuning; best 3 for lesions.</li>
 <li>Naka–Rushton fits with the exponent fixed by the no-surround fit; c50 is capped at 5 for the gain map, and types with c50 > 2 are flagged as near-linear.</li>
 <li>Lesions zero the weights of the chosen edges in trained networks, with no retraining.</li>
+<li><b>Grafted pools</b> (<code>graft.py</code>): Dm17, Dm1 and Dm15 are added as pool fields over the 721 columns (τ = 50 ms). Inputs are the signed FlyWire synapse fractions from flyvis cell types, half-wave rectified relative to the grey operating point. The kernel is Gaussian, with RMS radius equal to the FlyWire input radius (7.2, 2.5 and 1.3 columns). Output weights are the FlyWire output fractions onto flyvis types. Divisive: D' = D₀ + (D − D₀)/(1 + G). Subtractive: D' = D − σ·G, with σ the drive SD under a full-field grating. g = 1 halves the main target's modulation at full contrast. CRF runs use the 2 best models. Fine-tuning: Adam (network 1e-4, decoder 1e-4, log-gains 1e-2), batch 4, original augmentation, fold-1 validation split; 120 iterations for the grafted network and for a no-pool control.</li>
 <li><b>Dm3 model</b>: every Dm3p/q/v and TmY9q/TmY9q⊥/TmY4 neuron, FlyWire weights normalized per neuron. Columnar inputs carry rectified ON/OFF contrast; ACh +, GABA/Glu −. Rate dynamics run to steady state; responses are peaks over test-grating phase, averaged over mask phase. Masking ratio = (R(test+mask) − R(mask)) / R(test).</li></ul>
 <h2>Caveats</h2><ul>
 <li>Transmitter → sign is a prediction. Glutamate is treated as inhibitory throughout, and that is unverified for Dm3, Dm15 and Dm17.</li>
@@ -87,5 +113,5 @@ methods = """
 <li>The Dm3 model is static (no temporal dynamics) and treats columnar inputs as ideal ON/OFF rectifiers.</li></ul>
 <p class="hint">Code: <code>analysis/</code> in this repo. Reproduce with <code>flywire_pools.py</code>, <code>dm3_circuit.py</code>, <code>dm3_model.py</code>, <code>run_experiments.py</code>, <code>assemble_*.py</code>, <code>write_findings.py</code>.</p>
 """
-json.dump(dict(cards=cards, lamina=lamina, dm3=dm3, methods=methods), open('docs/data/findings.json', 'w'), indent=1)
+json.dump(dict(cards=cards, lamina=lamina, dm3=dm3, methods=methods, graft=graft_callout), open('docs/data/findings.json', 'w'), indent=1)
 print(json.dumps(cards, indent=1)[:3000])

@@ -1,7 +1,7 @@
 """Render each dashboard tab headlessly and save screenshots + console errors (for checking)."""
 import sys, asyncio, subprocess, time
 from playwright.async_api import async_playwright
-TABS = ['overview', 'pools', 'orient', 'dm3', 'crf', 'lesion', 'methods']
+TABS = sys.argv[2].split(',') if len(sys.argv) > 2 else ['overview', 'pools', 'orient', 'dm3', 'crf', 'lesion', 'graft', 'methods']
 
 async def main(out):
     srv = subprocess.Popen([sys.executable, '-m', 'http.server', '8765', '-d', 'docs'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

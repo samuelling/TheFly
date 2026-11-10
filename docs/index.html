@@ -20,6 +20,7 @@
       <button data-tab="dm3">Dm3 circuit model</button>
       <button data-tab="crf">In-silico CRFs</button>
       <button data-tab="lesion">Lesions</button>
+      <button data-tab="graft">Grafted pools</button>
       <button data-tab="methods">Methods &amp; caveats</button>
     </nav>
   </div>
@@ -36,6 +37,7 @@
     <div><b>3 · Orientation</b><span>Elongated input pools that share an axis across a cell type</span></div>
     <div><b>4 · Simulation</b><span>flyvis connectome-constrained ensemble: CRFs, surrounds, lesions</span></div>
     <div><b>5 · Subcircuit model</b><span>Dm3 → TmY built neuron-by-neuron from FlyWire, run live in your browser</span></div>
+    <div><b>6 · Graft</b><span>Dm17, Dm1, Dm15 added to the trained model as divisive or subtractive pools, then fine-tuned on optic flow</span></div>
   </div>
   <p class="note">Everything here is computed from published data: no new experiments. The physiology to compare against is
     Drews et al. 2020 (surround contrast normalization in the medulla) and the Silies lab's luminance gain control work.</p>
@@ -154,6 +156,27 @@
     <div class="col"><div id="lesCRF" class="plot"></div></div>
   </div>
   <div id="lesHeat" class="plot tall"></div>
+</section>
+
+<section id="graft" class="tab">
+  <h2>Adding the missing denominator</h2>
+  <p class="hint">Dm17, Dm1 and Dm15 are grafted onto trained flyvis networks as smooth pools over the eye. Their input weights,
+    output targets and spatial extent all come from FlyWire. Each pool is driven by its inputs' depolarization relative to grey,
+    so the grey state is untouched. It then either <b>divides</b> its targets' drive (shunting toward the operating point) or
+    <b>subtracts</b> a matched current. Gain g = 1 halves the main target's drive under a full-field, full-contrast grating.</p>
+  <div class="ctrl">
+    <label>cell type <select id="grType"></select></label>
+    <label>configuration <select id="grCfg"></select></label>
+  </div>
+  <div class="row">
+    <div class="col"><div id="grCRF" class="plot"></div></div>
+    <div class="col"><div id="grSweep" class="plot"></div></div>
+  </div>
+  <div class="row">
+    <div class="col"><div id="grMap" class="plot"></div></div>
+    <div class="col"><div id="grTask" class="plot"></div><div id="grTaskNote" class="hint"></div></div>
+  </div>
+  <div class="callout" id="grCallout"></div>
 </section>
 
 <section id="methods" class="tab">
